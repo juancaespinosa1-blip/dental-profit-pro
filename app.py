@@ -23,28 +23,21 @@ if "user" not in st.session_state:
 
 u_id = st.session_state.user.user.id
 
-# --- CARGA INTELIGENTE ---
+# --- CARGA DESDE 'Inventario' (CON MAYÚSCULA) ---
 try:
-    res = supabase.table("inventario").select("*").eq("user_id", u_id).execute()
+    # Cambiado a 'Inventario' para coincidir con tu esquema
+    res = supabase.table("Inventario").select("*").eq("user_id", u_id).execute()
     df = pd.DataFrame(res.data)
 except Exception as e:
-    st.error(f"Error de conexión con la tabla: {e}")
+    st.error(f"Error crítico de tabla: {e}")
     df = pd.DataFrame()
 
-# Mapeo de columnas para evitar el APIError
-# Buscamos nombres comunes para 'cantidad' y 'precio'
-col_map = {
-    'material': 'material',
-    'precio_compra': 'precio_compra',
-    'cantidad_total': 'cantidad_total',
-    'unidad': 'unidad'
-}
-
 if df.empty:
-    df = pd.DataFrame(columns=col_map.values())
+    # Estructura base si no hay datos
+    df = pd.DataFrame(columns=["material", "precio_compra", "cantidad_total", "unidad"])
     df.loc[0] = ["Ejemplo", 0.0, 1.0, "u"]
 
-# --- LÓGICA DE CÁLCULO (ESTÁNDAR DE ORO) ---
+# --- LÓGICA DE CÁLCULO ---
 st.sidebar.title("DentalProfit Pro")
 menu = st.sidebar.radio("Ir a:", ["Calculadora", "Inventario", "Configuración"])
 
@@ -60,55 +53,4 @@ if menu == "Calculadora":
     
     with c2:
         mats_list = df["material"].dropna().unique().tolist()
-        sel = st.multiselect("Materiales:", mats_list)
-        costo_mats = 0.0
-        
-        for m in sel:
-            row = df[df["material"] == m].iloc[0]
-            # Aseguramos que los valores sean numéricos para evitar errores de cálculo
-            p = float(row.get("precio_compra", 0))
-            c = float(row.get("cantidad_total", 1))
-            u = row.get("unidad", "u")
-            
-            costo_unit = p / c if c > 0 else 0
-            cant_u = st.number_input(f"Cantidad de {m} ({u})", 0.0, float(c)*5, 0.1, key=f"k_{m}")
-            costo_mats += cant_u * costo_unit
-
-    c_operativo = (mins / 60) * st.session_state.costo_hora
-    p_final = (c_operativo + costo_mats) * (1 + margen/100)
-    
-    st.divider()
-    res1, res2, res3 = st.columns(3)
-    res1.metric("Costo Sillón", f"${c_operativo:.2f}")
-    res2.metric("Costo Insumos", f"${costo_mats:.2f}")
-    res3.metric("PRECIO SUGERIDO", f"${p_final:.2f}")
-
-elif menu == "Inventario":
-    st.header("📦 Inventario (Sincronizado)")
-    # El editor ahora solo muestra lo que la tabla de Supabase realmente tiene
-    df_ed = st.data_editor(df, num_rows="dynamic", use_container_width=True,
-                           column_config={"user_id": None, "id": None, "created_at": None})
-    
-    if st.button("💾 Guardar y Reparar Tabla"):
-        try:
-            # Limpieza de datos antes de subir
-            datos = df_ed.to_dict(orient='records')
-            for d in datos: 
-                d['user_id'] = u_id
-                # Forzamos que los números sean números para evitar el APIError
-                if 'precio_compra' in d: d['precio_compra'] = float(d['precio_compra'])
-                if 'cantidad_total' in d: d['cantidad_total'] = float(d['cantidad_total'])
-
-            supabase.table("inventario").upsert(datos).execute()
-            st.success("¡Sincronización exitosa!")
-            st.rerun()
-        except Exception as e:
-            st.error("Error de columnas. Verifica que en Supabase las columnas se llamen: material, precio_compra, cantidad_total y unidad.")
-
-elif menu == "Configuración":
-    st.header("⚙️ Gastos de Operación")
-    gastos = st.number_input("Gastos fijos mes", value=4500.0)
-    horas = st.number_input("Horas laborables mes", value=160.0)
-    if st.button("Actualizar"):
-        st.session_state.costo_hora = gastos / horas
-        st.success(f"Costo hora: ${st.session_state.costo_hora:.2f}")
+        sel = st.multise
