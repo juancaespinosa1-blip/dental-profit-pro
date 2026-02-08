@@ -2,56 +2,73 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 
-# --- 1. CONFIGURACIÓN VISUAL ---
-st.set_page_config(page_title="DentalProfit Pro", page_icon="🦷", layout="wide")
-
-# Estilos para que no parezca un texto plano
-st.markdown("""
-    <style>
-    .stApp { background-color: #f8f9fc; }
-    .main-header { color: #1E3A8A; font-size: 2rem; font-weight: bold; }
-    .metric-container { background-color: white; padding: 15px; border-radius: 10px; border-left: 5px solid #3B82F6; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    </style>
-""", unsafe_allow_html=True)
-
-# --- 2. CONEXIÓN ---
+# 1. CONEXIÓN BÁSICA
 URL_SB = "https://xwblgnzewfsalfblkroy.supabase.co"
 KEY_SB = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3Ymxnbnpld2ZzYWxmYmxrcm95Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NzU2MzMsImV4cCI6MjA4NjE1MTYzM30.QbnSim-l6gJU7Ycnk7IItA9ACFlA-q3XaAcvRvCRRx8"
 supabase = create_client(URL_SB, KEY_SB)
 
-if 'costo_hora' not in st.session_state:
-    st.session_state.costo_hora = 30.0
-
-# --- 3. LOGIN VISUAL ---
+# 2. LOGIN SIN ADORNOS
 if "user" not in st.session_state:
-    st.markdown("<p class='main-header'>🦷 DentalProfit Pro</p>", unsafe_allow_html=True)
-    with st.container():
-        e = st.text_input("Correo electrónico")
-        p = st.text_input("Contraseña", type="password")
-        if st.button("INGRESAR AL SISTEMA", type="primary"):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": e, "password": p})
-                st.session_state.user = res
-                st.rerun()
-            except: st.error("Acceso denegado. Revisa tus datos.")
+    st.title("Acceso")
+    e = st.text_input("Correo")
+    p = st.text_input("Clave", type="password")
+    if st.button("Entrar"):
+        try:
+            res = supabase.auth.sign_in_with_password({"email": e, "password": p})
+            st.session_state.user = res
+            st.rerun()
+        except: st.error("Error")
     st.stop()
 
-# --- 4. CARGA DE DATOS ---
 u_id = st.session_state.user.user.id
+
+# 3. CARGA DE DATOS (TABLA: Inventario)
 try:
-    # Usando 'Inventario' con la I mayúscula que detectamos
     res = supabase.table("Inventario").select("*").eq("user_id", u_id).execute()
     df = pd.DataFrame(res.data)
 except:
-    df = pd.DataFrame()
+    df = pd.DataFrame(columns=["material", "precio_compra", "cantidad_total", "unidad"])
 
-columnas = ["material", "precio_compra", "cantidad_total", "unidad"]
-for c in columnas:
-    if c not in df.columns: df[c] = 0.0 if c != "material" and c != "unidad" else ""
+# 4. INTERFAZ SIMPLE (Calculadora de porciones)
+st.title("Calculadora Dental Pro")
+opcion = st.sidebar.selectbox("Menú", ["Calculadora", "Inventario"])
 
-# --- 5. INTERFAZ DE USUARIO ---
-st.sidebar.title("MENÚ DENTALPROFIT")
-opcion = st.sidebar.selectbox("Seleccione una sección:", ["📊 Calculadora de Ganancia", "📦 Gestión de Inventario", "⚙️ Configuración Clínica"])
+if opcion == "Calculadora":
+    # Costo por hora fijo para evitar NameError
+    costo_h = 30.0
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        minutos = st.number_input("Minutos de sillón", 5, 300, 45)
+        margen = st.number_input("Margen %", 50, 500, 100)
+    
+    with col2:
+        mats_disp = df["material"].tolist() if not df.empty else []
+        sel = st.multiselect("Materiales", mats_disp)
+        costo_mats = 0.0
+        
+        for m in sel:
+            row = df[df["material"] == m].iloc[0]
+            # LÓGICA DE PORCIÓN: Precio envase / contenido total
+            unitario = float(row["precio_compra"]) / float(row["cantidad_total"]) if float(row["cantidad_total"]) > 0 else 0
+            usado = st.number_input(f"¿Cuánto {m} ({row['unidad']})?", 0.0, 1000.0, 0.1, key=m)
+            costo_mats += (usado * unitario)
 
-if opcion == "📊 Calculadora de Ganancia":
-    st.markdown("<p class='main-
+    # CÁLCULO FINAL
+    costo_tiempo = (minutos / 60) * costo_h
+    total = (costo_tiempo + costo_mats) * (1 + margen/100)
+    
+    st.metric("PRECIO SUGERIDO", f"${total:,.2f}")
+    st.write(f"Costo material: ${costo_mats:.2f} | Costo tiempo: ${costo_tiempo:.2f}")
+
+elif opcion == "Inventario":
+    st.subheader("Editar Insumos")
+    # Solo columnas necesarias para evitar errores de API
+    df_ed = st.data_editor(df[["material", "precio_compra", "cantidad_total", "unidad"]], num_rows="dynamic")
+    
+    if st.button("Guardar"):
+        datos = df_ed.to_dict(orient='records')
+        for d in datos: d['user_id'] = u_id
+        supabase.table("Inventario").upsert(datos).execute()
+        st.success("OK")
+        st.rerun()
