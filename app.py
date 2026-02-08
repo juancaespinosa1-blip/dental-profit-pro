@@ -1,7 +1,6 @@
- import streamlit as st
+import streamlit as st
 
-st.title("✅ ¡Prueba de Conexión Exitosa!")
-st.write("Si ves esto, tu app está viva de nuevo.")
-
-if st.button("Haz clic aquí"):
+st.write("Hola, soy tu app.")
+st.write("Si puedes leer esto, el sistema funciona.")
+if st.button("Pulsar para globos"):
     st.balloons()
