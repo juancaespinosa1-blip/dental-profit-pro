@@ -1,102 +1,69 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-from datetime import datetime
 from supabase import create_client, Client
 
-# ───────────────────────────────────────────────
-# CONFIGURACIÓN (Tus llaves ya integradas)
-# ───────────────────────────────────────────────
-st.set_page_config(page_title="DentalProfit Pro", page_icon="🦷", layout="wide")
+# 1. CONFIGURACIÓN CERO ERRORES
+st.set_page_config(page_title="DentalProfit Pro", layout="wide")
 
 URL_SB = "https://xwblgnzewfsalfblkroy.supabase.co"
 KEY_SB = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3Ymxnbnpld2ZzYWxmYmxrcm95Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1NzU2MzMsImV4cCI6MjA4NjE1MTYzM30.QbnSim-l6gJU7Ycnk7IItA9ACFlA-q3XaAcvRvCRRx8"
 supabase: Client = create_client(URL_SB, KEY_SB)
 
-# Estilos de la interfaz
-st.markdown("""
-    <style>
-    .stApp { background-color: #f8f9fc; }
-    .metric-card {
-        background: white; padding: 1.4rem; border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-left: 5px solid #0d6efd;
-        margin: 0.8rem 0;
-    }
-    [data-testid="stMetricValue"] { font-size: 1.9rem !important; }
-    </style>
-""", unsafe_allow_html=True)
-
-# ───────────────────────────────────────────────
-# ACCESO (Protegiendo tus datos)
-# ───────────────────────────────────────────────
+# 2. ACCESO DIRECTO
 if "user" not in st.session_state:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.title("🦷 Acceso DentalProfit")
-        e = st.text_input("Email")
-        p = st.text_input("Clave de licencia", type="password")
-        if st.button("Iniciar sesión", type="primary", use_container_width=True):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": e, "password": p})
-                st.session_state.user = res
-                st.rerun()
-            except: st.error("Clave o usuario incorrecto")
+    st.title("🦷 Acceso DentalProfit")
+    e = st.text_input("Email")
+    p = st.text_input("Clave", type="password")
+    if st.button("Iniciar sesión"):
+        try:
+            res = supabase.auth.sign_in_with_password({"email": e, "password": p})
+            st.session_state.user = res
+            st.rerun()
+        except: st.error("Error de credenciales")
     st.stop()
 
 u_id = st.session_state.user.user.id
 
-# ───────────────────────────────────────────────
-# CARGA DE DATOS DESDE NUBE
-# ───────────────────────────────────────────────
-# Cargamos el inventario real de tu base de datos
-res_inv = supabase.table("inventario").select("*").eq("user_id", u_id).execute()
-df_db = pd.DataFrame(res_inv.data)
-
-if df_db.empty:
-    st.session_state.inventario = pd.DataFrame([
-        {"Material": "Resina Filtek Supreme", "Precio": 68.50, "Cantidad": 4.0, "Unidad": "g"},
-        {"Material": "Adhesivo Scotchbond", "Precio": 135.0, "Cantidad": 5.0, "Unidad": "ml"}
-    ])
-else:
-    # Renombrar columnas para que coincidan con la lógica del código Grok
-    st.session_state.inventario = df_db.rename(columns={
-        "material": "Material", 
-        "precio_compra": "Precio", 
-        "cantidad_total": "Cantidad", 
-        "unidad": "Unidad"
-    })
-
-# Cálculo del costo por unidad (la porción)
-st.session_state.inventario["Costo por unidad"] = st.session_state.inventario["Precio"] / st.session_state.inventario["Cantidad"].replace(0, 1)
-
+# 3. CARGA LIMPIA DE DATOS
 if 'costo_hora' not in st.session_state:
     st.session_state.costo_hora = 28.50
 
-# ───────────────────────────────────────────────
-# MENÚ LATERAL
-# ───────────────────────────────────────────────
-with st.sidebar:
-    st.title("🦷 DentalProfit Pro")
-    menu = st.radio("Menú", ["Dashboard", "Calculadora de precio", "Inventario", "Configuración"])
-    if st.button("🚪 Cerrar sesión"):
-        st.session_state.clear()
-        st.rerun()
+# Traer datos directamente
+res = supabase.table("inventario").select("*").eq("user_id", u_id).execute()
+df = pd.DataFrame(res.data)
 
-# ───────────────────────────────────────────────
-# LÓGICA DE CÁLCULO (TU ESTÁNDAR DE ORO)
-# ───────────────────────────────────────────────
-if menu == "Dashboard":
-    st.header("🏦 Panel de Control")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Costo por minuto", f"${st.session_state.costo_hora/60:.3f}")
-    m2.metric("Insumos registrados", len(st.session_state.inventario))
-    m3.metric("Costo hora operador", f"${st.session_state.costo_hora:.2f}")
+# Si está vacío, crear estructura con los nombres correctos
+if df.empty:
+    df = pd.DataFrame(columns=["material", "precio_compra", "cantidad_total", "unidad"])
+    df.loc[0] = ["Resina Ejemplo", 60.0, 4.0, "g"]
 
-    fig = px.pie(names=["Gastos Fijos", "Utilidad Esperada"], values=[st.session_state.costo_hora, 50], hole=0.4)
-    st.plotly_chart(fig, use_container_width=True)
+# 4. INTERFAZ
+menu = st.sidebar.radio("Menú", ["Calculadora", "Inventario", "Configuración"])
 
-elif menu == "Calculadora de precio":
-    st.header("🧮 Calculadora de precio realista")
-    col1, col2 = st.columns([1,1])
+if menu == "Calculadora":
+    st.header("🧮 Calculadora de Precio Real (Estandar de Oro)")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        minutos = st.number_input("Minutos en sillón", 5, 300, 45)
+        margen = st.slider("Margen de ganancia %", 50, 300, 100)
+    
+    with col2:
+        st.subheader("Insumos")
+        seleccionados = st.multiselect("Materiales:", df["material"].tolist())
+        costo_mats = 0.0
+        
+        for m in seleccionados:
+            # Extraer fila de forma segura
+            row = df[df["material"] == m].iloc[0]
+            p_envase = float(row["precio_compra"])
+            c_envase = float(row["cantidad_total"])
+            
+            # Cálculo de porción
+            costo_unitario = p_envase / c_envase if c_envase > 0 else 0
+            cant_usada = st.number_input(f"Cantidad usada de {m} ({row['unidad']})", 0.0, float(c_envase)*2, 0.1, key=f"k_{m}")
+            costo_mats += cant_usada * costo_unitario
 
-    with col1
+    # Resultados
+    costo_personal = (minutos / 60) * st.session_state.costo_hora
+    cost
