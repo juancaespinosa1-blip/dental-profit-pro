@@ -158,7 +158,7 @@ class DashboardScreen(Screen):
         img.texture = kivy.core.image.Image.load_memory(output.getvalue(), ext='png').texture
         self.layout.add_widget(img)
         
-        back_btn = Button(text='Volver al menú', size_hint_y=0.1, on_press=lambda x: self.manager.current = 'menu')
+        back_btn = Button(text='Volver al menú', size_hint_y=0.1, on_press=self.manager.current = 'menu')
         self.layout.add_widget(back_btn)
 
 class CalculatorScreen(Screen):
@@ -481,3 +481,5 @@ class DentalProfitApp(App):
 if __name__ == '__main__':
     app = DentalProfitApp()
     app.run()
+quito lambda del botón  
+
